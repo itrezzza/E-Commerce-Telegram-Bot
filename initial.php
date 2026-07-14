@@ -453,9 +453,67 @@ function back_to_cats()
         }
     }
 }
+function send_product_view($chat_id, $msg, $keyboard, $image = null, $old_message_id = null)
+{
+    $replyMarkup = json_encode([
+        'inline_keyboard' => $keyboard
+    ]);
+
+    if (!empty($image)) {
+        $photoUrl = BASEURI . '/' . ltrim($image, '/');
+
+        if ($old_message_id) {
+            bot('deleteMessage', [
+                'chat_id' => $chat_id,
+                'message_id' => $old_message_id
+            ]);
+        }
+
+        if (mb_strlen(strip_tags($msg), 'UTF-8') <= 1000) {
+            bot('sendPhoto', [
+                'chat_id' => $chat_id,
+                'photo' => $photoUrl,
+                'caption' => $msg,
+                'parse_mode' => 'HTML',
+                'reply_markup' => $replyMarkup
+            ]);
+        } else {
+            bot('sendPhoto', [
+                'chat_id' => $chat_id,
+                'photo' => $photoUrl
+            ]);
+
+            bot('sendMessage', [
+                'chat_id' => $chat_id,
+                'text' => $msg,
+                'parse_mode' => 'HTML',
+                'reply_markup' => $replyMarkup
+            ]);
+        }
+
+        return;
+    }
+
+    if ($old_message_id) {
+        bot('editMessageText', [
+            'chat_id' => $chat_id,
+            'message_id' => $old_message_id,
+            'parse_mode' => "HTML",
+            'text' => $msg,
+            'reply_markup' => $replyMarkup
+        ]);
+    } else {
+        bot('sendMessage', [
+            'chat_id' => $chat_id,
+            'parse_mode' => "HTML",
+            'text' => $msg,
+            'reply_markup' => $replyMarkup
+        ]);
+    }
+}
 function show_product()
 {
-    global $footer_msg, $keyboard, $id, $cdata, $cid, $product_info_waiting, $cuserid, $cmsgid, $name, $desc, $price;
+    global $footer_msg, $keyboard, $id, $cdata, $cid, $product_info_waiting, $cuserid, $cmsgid, $name, $desc, $price, $image;
     if (preg_match('/file/', $cdata)) {
 
         bot('answercallbackquery', [
@@ -478,21 +536,13 @@ function show_product()
         $msg = fa_num($msg);
 
 
-        bot('editMessageText', [
-            'chat_id' => $cuserid,
-            'message_id' => $cmsgid,
-            'parse_mode' => "HTML",
-            'text' => $msg,
-            'reply_markup' => json_encode([
-                'inline_keyboard' => $keyboard
-            ])
-        ]);
+        send_product_view($cuserid, $msg, $keyboard, $image, $cmsgid);
     }
 }
 
 function send_product_by_id()
 {
-    global $text, $footer_msg, $keyboard, $id, $name, $desc, $price, $userid;
+    global $text, $footer_msg, $keyboard, $id, $name, $desc, $price, $userid, $image;
     
     if (preg_match('/file/', $text)) {
         if (is_verified($userid)) {
@@ -510,14 +560,7 @@ function send_product_by_id()
             $msg = str_replace("[footer_msg]", $footer_msg, $msg);
             $msg = fa_num($msg);
 
-            bot('sendmessage', [
-                'chat_id' => $userid,
-                'parse_mode' => "HTML",
-                'text' => $msg,
-                'reply_markup' => json_encode([
-                    'inline_keyboard' => $keyboard
-                ])
-            ]);
+            send_product_view($userid, $msg, $keyboard, $image);
         } else {
             request_phone();
         }
@@ -542,7 +585,7 @@ function already_purchased($userid, $productid)
 }
 function product_info($product_id)
 {
-    global $telegram, $name, $desc, $type, $price, $demo, $views;
+    global $telegram, $name, $desc, $type, $price, $demo, $views, $image;
     $sql = "select * from sp_files WHERE id='$product_id' and status=1";
     $db = $telegram->db->query($sql);
     $product = $db->fetch(PDO::FETCH_ASSOC);
@@ -556,6 +599,7 @@ function product_info($product_id)
         $price = number_format($product['price']) . " تومان ";
     }
     $demo = $product['demo'];
+    $image = $product['image'];
     $views = $product['views'];
     // Add one view whenever product is shown
     $views += 1;
