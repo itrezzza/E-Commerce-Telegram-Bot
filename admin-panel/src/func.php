@@ -347,9 +347,54 @@ function delete_user()
         return true;
     }
 }
+function upload_product_image($field = 'prd_image')
+{
+    if (!isset($_FILES[$field]) || $_FILES[$field]['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    if ($_FILES[$field]['error'] !== UPLOAD_ERR_OK) {
+        return false;
+    }
+
+    if ($_FILES[$field]['size'] > 2 * 1024 * 1024) {
+        return false;
+    }
+
+    $allowed = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp'
+    ];
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($_FILES[$field]['tmp_name']);
+
+    if (!isset($allowed[$mime])) {
+        return false;
+    }
+
+    $ext = $allowed[$mime];
+    $rootDir = dirname(__DIR__, 2);
+    $uploadDir = $rootDir . '/uploads/products/';
+
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+
+    $filename = 'product_' . time() . '_' . bin2hex(random_bytes(5)) . '.' . $ext;
+    $target = $uploadDir . $filename;
+
+    if (!move_uploaded_file($_FILES[$field]['tmp_name'], $target)) {
+        return false;
+    }
+
+    return 'uploads/products/' . $filename;
+}
 function insert_product()
 {
     global $db, $empty_inputs;
+
     $product_name = $_POST['prd_name'];
     $product_description = $_POST['prd_desc'];
     $product_category = $_POST['prd_cat'];
@@ -358,14 +403,32 @@ function insert_product()
     $product_type = $_POST['prd_type'];
     $product_status = $_POST['prd_status'];
     $product_demo = $_POST['demo'];
+
     if (isset($product_name) && isset($product_description) && isset($product_category) && isset($file_id) && isset($product_status)) {
-        $sql = "INSERT INTO sp_files VALUES(NULL,'$product_name','$product_description','$product_category','$file_id','$product_type','$price','$product_status','$product_demo',0)";
-        $result = $db->query($sql);
-        if ($result) {
-            return true;
-        } else {
+        $product_image = upload_product_image('prd_image');
+
+        if ($product_image === false) {
             return false;
         }
+
+        $sql = "INSERT INTO sp_files 
+        (name, description, catid, fileurl, type, price, status, demo, image, views)
+        VALUES
+        (:name, :description, :catid, :fileurl, :type, :price, :status, :demo, :image, 0)";
+
+        $stmt = $db->prepare($sql);
+
+        return $stmt->execute([
+            ':name' => $product_name,
+            ':description' => $product_description,
+            ':catid' => $product_category,
+            ':fileurl' => $file_id,
+            ':type' => $product_type,
+            ':price' => $price,
+            ':status' => $product_status,
+            ':demo' => $product_demo,
+            ':image' => $product_image
+        ]);
     } else {
         $empty_inputs = 1;
     }
@@ -373,9 +436,12 @@ function insert_product()
 
 function fetch_product_info($id)
 {
-    global $db, $product, $product_name, $product_description, $product_category, $file_id, $price, $product_type, $product_status, $product_demo;
+    global $db, $product, $product_name, $product_description, $product_category, $file_id, $price, $product_type, $product_status, $product_demo, $product_image;
+
+    $id = intval($id);
     $sql = "select * from sp_files where id='$id'";
     $product = $db->query($sql)->fetch(PDO::FETCH_ASSOC);
+
     $product_name = $product['name'];
     $product_description = $product['description'];
     $product_category = $product['catid'];
@@ -384,11 +450,13 @@ function fetch_product_info($id)
     $product_type = $product['type'];
     $product_status = $product['status'];
     $product_demo = $product['demo'];
+    $product_image = $product['image'];
 }
 
 function update_product($id)
 {
     global $db;
+
     $product_id = $_POST['id'];
     $product_name = $_POST['prd_name'];
     $product_description = $_POST['prd_desc'];
@@ -398,11 +466,66 @@ function update_product($id)
     $product_type = $_POST['prd_type'];
     $product_status = $_POST['prd_status'];
     $product_demo = $_POST['demo'];
-    $sql = "UPDATE sp_files SET name='$product_name',description='$product_description',catid='$product_category',fileurl='$file_id',type='$product_type',price='$price',status='$product_status',demo='$product_demo' where id='$product_id'";
-    $result = $db->query($sql);
-    if ($result) {
-        return true;
+
+    $new_image = upload_product_image('prd_image');
+
+    if ($new_image === false) {
+        return false;
     }
+
+    if ($new_image) {
+        $sql = "UPDATE sp_files SET
+            name = :name,
+            description = :description,
+            catid = :catid,
+            fileurl = :fileurl,
+            type = :type,
+            price = :price,
+            status = :status,
+            demo = :demo,
+            image = :image
+            WHERE id = :id";
+
+        $stmt = $db->prepare($sql);
+
+        return $stmt->execute([
+            ':name' => $product_name,
+            ':description' => $product_description,
+            ':catid' => $product_category,
+            ':fileurl' => $file_id,
+            ':type' => $product_type,
+            ':price' => $price,
+            ':status' => $product_status,
+            ':demo' => $product_demo,
+            ':image' => $new_image,
+            ':id' => $product_id
+        ]);
+    }
+
+    $sql = "UPDATE sp_files SET
+        name = :name,
+        description = :description,
+        catid = :catid,
+        fileurl = :fileurl,
+        type = :type,
+        price = :price,
+        status = :status,
+        demo = :demo
+        WHERE id = :id";
+
+    $stmt = $db->prepare($sql);
+
+    return $stmt->execute([
+        ':name' => $product_name,
+        ':description' => $product_description,
+        ':catid' => $product_category,
+        ':fileurl' => $file_id,
+        ':type' => $product_type,
+        ':price' => $price,
+        ':status' => $product_status,
+        ':demo' => $product_demo,
+        ':id' => $product_id
+    ]);
 }
 
 function total_income()
