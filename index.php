@@ -51,6 +51,19 @@ if ($text == $shop) {
     } else {
         request_phone();
     }
+    if ($text == $cart) {
+
+    if (is_verified($userid)) {
+
+        show_cart($userid);
+
+    } else {
+
+        request_phone();
+
+    }
+
+}
 }
 
 // Check Vip
