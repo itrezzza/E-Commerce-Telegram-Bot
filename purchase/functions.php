@@ -132,6 +132,192 @@ function delete_order($orderid){
    $telegram->db->query("DELETE FROM sp_orders where id='$orderid' and status=0");
 
 }
+function delete_cart_order_if_exists_before($userid)
+{
+    global $telegram;
+
+    $stmt = $telegram->db->prepare("SELECT id FROM sp_cart_orders WHERE userid = ? AND status = 0");
+    $stmt->execute([$userid]);
+    $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($orders as $order) {
+        $orderid = intval($order['id']);
+
+        $deleteItems = $telegram->db->prepare("DELETE FROM sp_cart_order_items WHERE order_id = ?");
+        $deleteItems->execute([$orderid]);
+
+        $deleteOrder = $telegram->db->prepare("DELETE FROM sp_cart_orders WHERE id = ? AND userid = ? AND status = 0");
+        $deleteOrder->execute([$orderid, $userid]);
+    }
+}
+
+function submit_cart_order($userid)
+{
+    global $telegram, $time, $cart_orderid, $cart_amount, $cart_name;
+
+    $stmt = $telegram->db->prepare("
+        SELECT c.productid, c.qty, f.name, f.price
+        FROM sp_cart c
+        JOIN sp_files f ON f.id = c.productid
+        WHERE c.userid = ? AND f.status = 1
+    ");
+    $stmt->execute([$userid]);
+    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$items) {
+        die('سبد خرید خالی است');
+    }
+
+    delete_cart_order_if_exists_before($userid);
+
+    $cart_amount = 0;
+
+    foreach ($items as $item) {
+        $cart_amount += intval($item['price']) * intval($item['qty']);
+    }
+
+    if ($cart_amount <= 0) {
+        die('مبلغ سبد خرید نامعتبر است');
+    }
+
+    $cart_name = 'پرداخت سبد خرید';
+
+    $stmt = $telegram->db->prepare("
+        INSERT INTO sp_cart_orders (userid, amount, transcode, status, date)
+        VALUES (?, ?, '', 0, ?)
+    ");
+    $stmt->execute([$userid, $cart_amount, $time]);
+
+    $cart_orderid = $telegram->db->lastInsertId();
+
+    foreach ($items as $item) {
+        $stmt = $telegram->db->prepare("
+            INSERT INTO sp_cart_order_items (order_id, productid, price, qty)
+            VALUES (?, ?, ?, ?)
+        ");
+
+        $stmt->execute([
+            $cart_orderid,
+            intval($item['productid']),
+            intval($item['price']),
+            intval($item['qty'])
+        ]);
+    }
+}
+
+function gateway_cart_process($userid, $amount, $orderid)
+{
+    $phone = fetch_user_number($userid);
+
+    $MerchantID = API;
+    $Amount = $amount;
+    $Description = 'پرداخت سبد خرید';
+    $Mobile = $phone;
+    $CallbackURL = BASEURI . '/purchase/cart_verify.php?order=' . $orderid;
+
+    $client = new nusoap_client('https://www.zarinpal.com/pg/services/WebGate/wsdl', 'wsdl');
+    $client->soap_defencoding = 'UTF-8';
+
+    $result = $client->call('PaymentRequest', [
+        [
+            'MerchantID' => $MerchantID,
+            'Amount' => $Amount,
+            'Description' => $Description,
+            'Mobile' => $Mobile,
+            'CallbackURL' => $CallbackURL,
+        ],
+    ]);
+
+    if ($result['Status'] == 100) {
+        header('Location: https://www.zarinpal.com/pg/StartPay/' . $result['Authority']);
+    } else {
+        echo 'تراکنش با خطا مواجه شد';
+    }
+}
+
+function select_cart_order($orderid)
+{
+    global $telegram, $cart_amount, $userid;
+
+    $stmt = $telegram->db->prepare("SELECT * FROM sp_cart_orders WHERE id = ? AND status = 0");
+    $stmt->execute([$orderid]);
+
+    $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$order) {
+        die('سفارش معتبر نیست');
+    }
+
+    $cart_amount = intval($order['amount']);
+    $userid = intval($order['userid']);
+}
+
+function update_cart_order($refid, $orderid, $amount, $userid)
+{
+    global $telegram;
+
+    $stmt = $telegram->db->prepare("
+        UPDATE sp_cart_orders
+        SET status = 1, transcode = ?
+        WHERE id = ? AND amount = ? AND userid = ?
+    ");
+
+    $stmt->execute([$refid, $orderid, $amount, $userid]);
+}
+
+function delete_cart_order($orderid)
+{
+    global $telegram;
+
+    $stmt = $telegram->db->prepare("DELETE FROM sp_cart_order_items WHERE order_id = ?");
+    $stmt->execute([$orderid]);
+
+    $stmt = $telegram->db->prepare("DELETE FROM sp_cart_orders WHERE id = ? AND status = 0");
+    $stmt->execute([$orderid]);
+}
+
+function send_cart_files($orderid, $userid, $refid)
+{
+    global $telegram, $time;
+
+    $stmt = $telegram->db->prepare("
+        SELECT i.productid, i.price, i.qty, f.name, f.fileurl
+        FROM sp_cart_order_items i
+        JOIN sp_files f ON f.id = i.productid
+        WHERE i.order_id = ? AND f.status = 1
+    ");
+    $stmt->execute([$orderid]);
+
+    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($items as $item) {
+        $productid = intval($item['productid']);
+        $price = intval($item['price']);
+        $name = $item['name'];
+        $fileurl = $item['fileurl'];
+
+        $insert = $telegram->db->prepare("
+            INSERT INTO sp_orders (productid, userid, price, transcode, status, type, date)
+            VALUES (?, ?, ?, ?, 1, 'file', ?)
+        ");
+        $insert->execute([$productid, $userid, $price, $refid, $time]);
+
+        $msg = options('product_purchased_successfully');
+        $msg = str_replace("[refid]", $refid, $msg);
+        $msg = str_replace("[name]", $name, $msg);
+        $msg = str_replace("[price]", number_format($price), $msg);
+        $msg = fa_num($msg);
+
+        bot('senddocument', [
+            'chat_id' => $userid,
+            'document' => $fileurl,
+            'caption' => $msg,
+        ]);
+    }
+
+    $stmt = $telegram->db->prepare("DELETE FROM sp_cart WHERE userid = ?");
+    $stmt->execute([$userid]);
+}
 ?>
 
 <style>
