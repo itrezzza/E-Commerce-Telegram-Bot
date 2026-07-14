@@ -173,6 +173,56 @@ CREATE TABLE IF NOT EXISTS `sp_orders` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `sp_cart`
+--
+
+DROP TABLE IF EXISTS `sp_cart`;
+CREATE TABLE IF NOT EXISTS `sp_cart` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `userid` bigint NOT NULL,
+  `productid` int NOT NULL,
+  `qty` int NOT NULL DEFAULT 1,
+  `created_at` int NOT NULL,
+  `updated_at` int NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_user_product` (`userid`,`productid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `sp_cart_orders`
+--
+
+DROP TABLE IF EXISTS `sp_cart_orders`;
+CREATE TABLE IF NOT EXISTS `sp_cart_orders` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `userid` bigint NOT NULL,
+  `amount` int NOT NULL,
+  `transcode` varchar(255) DEFAULT NULL,
+  `status` int NOT NULL DEFAULT 0,
+  `date` int NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `sp_cart_order_items`
+--
+
+DROP TABLE IF EXISTS `sp_cart_order_items`;
+CREATE TABLE IF NOT EXISTS `sp_cart_order_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_id` int NOT NULL,
+  `productid` int NOT NULL,
+  `price` int NOT NULL,
+  `qty` int NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Table structure for table `sp_tickets`
