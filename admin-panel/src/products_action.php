@@ -64,7 +64,11 @@ if (isset($_GET['create_product'])) {
                                                     لینک پیش نمایش
                                                 </label>
                                                 <input type="text" name="demo" class="mb-5 rounded-lg border-transparent flex-1 appearance-none border border-gray-300 w-full py-2 px-4 bg-white text-gray-700 placeholder-gray-400 shadow-sm text-base focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent" />
+<label for="prd_image" class="text-gray-700">
+عکس محصول
+</label>
 
+<input type="file" name="prd_image" accept="image/jpeg,image/png,image/webp" class="mb-5 rounded-lg border-transparent flex-1 appearance-none border border-gray-300 w-full py-2 px-4 bg-white text-gray-700 placeholder-gray-400 shadow-sm text-base focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent" />
                                                     <label for="price" class="text-gray-700">
                                                         قیمت(به تومان)
                                                     </label>
@@ -239,7 +243,21 @@ if (isset($_POST['create_product'])) {
                                                     لینک پیش نمایش
                                                 </label>
                                                 <input type="text" name="demo" value="<?= $product_demo ?>" class="mb-5 rounded-lg border-transparent flex-1 appearance-none border border-gray-300 w-full py-2 px-4 bg-white text-gray-700 placeholder-gray-400 shadow-sm text-base focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent" />
+<?php if (!empty($product_image)) { ?>
+    <label class="text-gray-700">
+    عکس فعلی محصول
+    </label>
 
+    <div class="mb-5">
+        <img src="../<?= htmlspecialchars($product_image) ?>" style="max-width:160px;border-radius:8px;">
+    </div>
+<?php } ?>
+
+<label for="prd_image" class="text-gray-700">
+تغییر عکس محصول
+</label>
+
+<input type="file" name="prd_image" accept="image/jpeg,image/png,image/webp" class="mb-5 rounded-lg border-transparent flex-1 appearance-none border border-gray-300 w-full py-2 px-4 bg-white text-gray-700 placeholder-gray-400 shadow-sm text-base focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent" />
                                                 <div id="price-section">
 
                                                     <label for="price" class="text-gray-700">
