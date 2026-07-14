@@ -396,9 +396,16 @@ function product_keyboard($userid)
             $footer_msg = $allowed_vip_msg;
             $keyboard = [[['text' => $dl_btn, 'callback_data' => "download#$id"]]];
         } else {
-            $footer_msg = $vip_msg;
-            $keyboard = [[['text' => $pay_btn, 'url' => $baseuri . "/purchase/pay.php?uid=$userid&product=$id"]]];
-        }
+    $footer_msg = $vip_msg;
+    $keyboard = [
+        [
+            ['text' => 'افزودن به سبد خرید', 'callback_data' => "cart_add#$id"]
+        ],
+        [
+            ['text' => $pay_btn, 'url' => $baseuri . "/purchase/pay.php?uid=$userid&product=$id"]
+        ]
+    ];
+}
     }
     if (isset($demo) && !empty($demo)) {
         $demo = [['text' => $demo_btn, 'url' => $demo]];
@@ -606,7 +613,215 @@ function product_info($product_id)
     $sql_view = "UPDATE sp_files SET views='$views' where id='$product_id'";
     $telegram->db->query($sql_view);
 }
+function cart_add()
+{
+    global $telegram, $cdata, $cid, $cuserid, $time;
 
+    if (!preg_match('/^cart_add#([0-9]+)$/', $cdata, $m)) {
+        return;
+    }
+
+    $productid = intval($m[1]);
+
+    $check = $telegram->db->prepare("SELECT id FROM sp_files WHERE id = ? AND status = 1");
+    $check->execute([$productid]);
+
+    if (!$check->fetch(PDO::FETCH_ASSOC)) {
+        bot('answercallbackquery', [
+            'callback_query_id' => $cid,
+            'text' => 'محصول پیدا نشد',
+            'show_alert' => false
+        ]);
+        return;
+    }
+
+    $stmt = $telegram->db->prepare("
+        INSERT INTO sp_cart (userid, productid, qty, created_at, updated_at)
+        VALUES (?, ?, 1, ?, ?)
+        ON DUPLICATE KEY UPDATE qty = qty + 1, updated_at = VALUES(updated_at)
+    ");
+    $stmt->execute([$cuserid, $productid, $time, $time]);
+
+    bot('answercallbackquery', [
+        'callback_query_id' => $cid,
+        'text' => 'محصول به سبد خرید اضافه شد',
+        'show_alert' => false
+    ]);
+}
+
+function cart_plus()
+{
+    global $telegram, $cdata, $cid, $cuserid, $time;
+
+    if (!preg_match('/^cart_plus#([0-9]+)$/', $cdata, $m)) {
+        return;
+    }
+
+    $productid = intval($m[1]);
+
+    $stmt = $telegram->db->prepare("
+        UPDATE sp_cart
+        SET qty = qty + 1, updated_at = ?
+        WHERE userid = ? AND productid = ?
+    ");
+    $stmt->execute([$time, $cuserid, $productid]);
+
+    bot('answercallbackquery', [
+        'callback_query_id' => $cid,
+        'text' => 'تعداد زیاد شد',
+        'show_alert' => false
+    ]);
+
+    show_cart($cuserid, true);
+}
+
+function cart_minus()
+{
+    global $telegram, $cdata, $cid, $cuserid, $time;
+
+    if (!preg_match('/^cart_minus#([0-9]+)$/', $cdata, $m)) {
+        return;
+    }
+
+    $productid = intval($m[1]);
+
+    $stmt = $telegram->db->prepare("
+        SELECT qty FROM sp_cart
+        WHERE userid = ? AND productid = ?
+    ");
+    $stmt->execute([$cuserid, $productid]);
+    $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$item) {
+        return;
+    }
+
+    if (intval($item['qty']) <= 1) {
+        $stmt = $telegram->db->prepare("DELETE FROM sp_cart WHERE userid = ? AND productid = ?");
+        $stmt->execute([$cuserid, $productid]);
+    } else {
+        $stmt = $telegram->db->prepare("
+            UPDATE sp_cart
+            SET qty = qty - 1, updated_at = ?
+            WHERE userid = ? AND productid = ?
+        ");
+        $stmt->execute([$time, $cuserid, $productid]);
+    }
+
+    bot('answercallbackquery', [
+        'callback_query_id' => $cid,
+        'text' => 'سبد خرید بروزرسانی شد',
+        'show_alert' => false
+    ]);
+
+    show_cart($cuserid, true);
+}
+
+function cart_remove()
+{
+    global $telegram, $cdata, $cid, $cuserid;
+
+    if (!preg_match('/^cart_remove#([0-9]+)$/', $cdata, $m)) {
+        return;
+    }
+
+    $productid = intval($m[1]);
+
+    $stmt = $telegram->db->prepare("DELETE FROM sp_cart WHERE userid = ? AND productid = ?");
+    $stmt->execute([$cuserid, $productid]);
+
+    bot('answercallbackquery', [
+        'callback_query_id' => $cid,
+        'text' => 'محصول حذف شد',
+        'show_alert' => false
+    ]);
+
+    show_cart($cuserid, true);
+}
+
+function show_cart($userid, $edit = false)
+{
+    global $telegram, $baseuri, $cmsgid;
+
+    $stmt = $telegram->db->prepare("
+        SELECT c.productid, c.qty, f.name, f.price
+        FROM sp_cart c
+        JOIN sp_files f ON f.id = c.productid
+        WHERE c.userid = ? AND f.status = 1
+        ORDER BY c.id DESC
+    ");
+    $stmt->execute([$userid]);
+    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$items) {
+        $msg = "سبد خرید شما خالی است.";
+        $keyboard = [
+            [
+                ['text' => 'بازگشت به دسته بندی ها', 'callback_data' => 'back_to_cats']
+            ]
+        ];
+
+        if ($edit && $cmsgid) {
+            bot('editMessageText', [
+                'chat_id' => $userid,
+                'message_id' => $cmsgid,
+                'text' => $msg,
+                'reply_markup' => json_encode(['inline_keyboard' => $keyboard])
+            ]);
+        } else {
+            bot('sendMessage', [
+                'chat_id' => $userid,
+                'text' => $msg,
+                'reply_markup' => json_encode(['inline_keyboard' => $keyboard])
+            ]);
+        }
+
+        return;
+    }
+
+    $msg = "سبد خرید:\n\n";
+    $total = 0;
+    $keyboard = [];
+
+    foreach ($items as $item) {
+        $productid = intval($item['productid']);
+        $qty = intval($item['qty']);
+        $price = intval($item['price']);
+        $line_total = $price * $qty;
+        $total += $line_total;
+
+        $msg .= $item['name'] . "\n";
+        $msg .= "تعداد: " . fa_num($qty) . "\n";
+        $msg .= "قیمت: " . fa_num(number_format($line_total)) . " تومان\n\n";
+
+        $keyboard[] = [
+            ['text' => '+', 'callback_data' => "cart_plus#$productid"],
+            ['text' => '-', 'callback_data' => "cart_minus#$productid"],
+            ['text' => 'حذف', 'callback_data' => "cart_remove#$productid"]
+        ];
+    }
+
+    $msg .= "جمع کل: " . fa_num(number_format($total)) . " تومان";
+
+    $keyboard[] = [
+        ['text' => 'پرداخت سبد خرید', 'url' => $baseuri . "/purchase/cart_pay.php?uid=$userid"]
+    ];
+
+    if ($edit && $cmsgid) {
+        bot('editMessageText', [
+            'chat_id' => $userid,
+            'message_id' => $cmsgid,
+            'text' => $msg,
+            'reply_markup' => json_encode(['inline_keyboard' => $keyboard])
+        ]);
+    } else {
+        bot('sendMessage', [
+            'chat_id' => $userid,
+            'text' => $msg,
+            'reply_markup' => json_encode(['inline_keyboard' => $keyboard])
+        ]);
+    }
+}
 function download_file()
 {
     global $cdata, $telegram, $cid, $cuserid, $sending_file, $ad, $ad_link;
