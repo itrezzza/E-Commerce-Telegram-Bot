@@ -28,7 +28,7 @@ if (isset($_GET['create_product'])) {
                                     </span>
                                 </div>
                             </div>
-                            <form method="POST" action="">
+                            <form method="POST" action="" enctype="multipart/form-data">
                                 <div class="mt-6">
                                     <div class="w-full space-y-10">
                                         <div class="w-full">
@@ -198,7 +198,7 @@ if (isset($_POST['create_product'])) {
                                     </span>
                                 </div>
                             </div>
-                            <form method="POST" action="">
+                            <form method="POST" action="" enctype="multipart/form-data">
                                 <div class="mt-6">
                                     <div class="w-full space-y-10">
                                         <div class="w-full">
