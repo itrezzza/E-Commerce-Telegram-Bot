@@ -5,6 +5,7 @@ if(!defined('INDEX')) {
 
 $home = options('home');
 $shop = options('shop');
+$cart = 'سبد خرید';
 $vip_member = options('vip_member');
 $my_transactions = options('my_transactions');
 $send_ticket = options('send_ticket');
@@ -60,10 +61,15 @@ $products_column_number = 1; // مدل نمایش محصولات (1 = در هر 
 
 
 $main_keyboard = array(
-    array($shop, $vip_member),
-    array($my_transactions, $account),
-    array($search_products),
-    array($send_ticket)
+
+ array($shop, $cart),
+
+ array($vip_member, $my_transactions),
+
+ array($account, $search_products),
+
+ array($send_ticket)
+
 );
 $phone_send_keyboard = array(
     array(array('text' => $phone_verefication, 'request_contact' => true)),
