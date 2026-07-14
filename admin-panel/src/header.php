@@ -18,6 +18,7 @@
     </summary>
     <ul>
       <li><a href="./index.php"><?=$dashboard?></a></li>
+     <li><a href="./sales-dashboard.php">داشبورد فروش</a></li>
       <li><a href="./categories.php"><?=$categories?></a></li>
       <li><a href="./users.php"><?=$users?></a></li>
       <li><a href="./setting.php"><?=$setting?></a></li>
